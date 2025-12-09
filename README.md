@@ -93,7 +93,7 @@ Advanced task management interface with filtering, searching, sorting, and pagin
 
 User-friendly modal for creating new tasks with all necessary fields including title, description, status, priority, due date, estimated time, and tags.
 
-![Create Task Modal](./public/screenshots/create-task.png)
+![Create Task Modal](./public/screenshots/create-task.PNG)
 
 ## 🛠 Tech Stack
 
