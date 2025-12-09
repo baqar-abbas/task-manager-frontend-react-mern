@@ -69,25 +69,25 @@ Task Manager is a comprehensive task management system that enables users to cre
 
 Sign in to your account with email and password. Includes "Remember me" functionality and password recovery options.
 
-![Login Page](./public/screenshots/login.png)
+![Login Page](./public/screenshots/login.PNG)
 
 ### Registration Page
 
 Create a new account with username, email, and password validation.
 
-![Registration Page](./public/screenshots/signup.png)
+![Registration Page](./public/screenshots/signup.PNG)
 
 ### Dashboard
 
 Welcome screen displaying task statistics, recent tasks, and task distribution analytics.
 
-![Dashboard](./public/screenshots/dashboard.png)
+![Dashboard](./public/screenshots/dashboard.PNG)
 
 ### Task Management
 
 Advanced task management interface with filtering, searching, sorting, and pagination capabilities.
 
-![Task Management](./public/screenshots/tasks.png)
+![Task Management](./public/screenshots/tasks.PNG)
 
 ### Create Task Modal
 
