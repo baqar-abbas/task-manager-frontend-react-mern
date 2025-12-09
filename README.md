@@ -1,6 +1,6 @@
 # Task Manager Frontend
 
-A modern, feature-rich task management application built with React, TypeScript, and Redux. This project provides a responsive user interface for managing tasks with real-time synchronization, advanced filtering, and seamless state management.
+A modern task management application built with React, TypeScript, and Redux. This project provides a responsive user interface for managing tasks with real-time synchronization, advanced filtering, and seamless state management.
 
 ## 📋 Table of Contents
 
