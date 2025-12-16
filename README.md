@@ -2,7 +2,14 @@
 
 A modern task management application built with React, TypeScript, and Redux. This project provides a responsive user interface for managing tasks with real-time synchronization, advanced filtering, and seamless state management.
 
-## 📋 Table of Contents
+## � Live Demo
+
+**Frontend:** [https://task-manager-client-csx8.onrender.com/](https://task-manager-client-csx8.onrender.com/)  
+**Backend API:** [https://task-manager-api-35i1.onrender.com](https://task-manager-api-35i1.onrender.com)
+
+---
+
+## �📋 Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
@@ -26,9 +33,10 @@ A modern task management application built with React, TypeScript, and Redux. Th
 
 Task Manager is a comprehensive task management system that enables users to create, read, update, and delete tasks with advanced features like real-time updates, task filtering, pagination, and user authentication. The application is built with modern web technologies and follows industry best practices.
 
-**Current Version:** 0.0.0 (Development)  
-**Status:** Active Development  
-**Live Demo:** [Coming Soon]
+**Current Version:** 1.0.0 (Production)  
+**Status:** ✅ Live & Deployed  
+**Frontend URL:** [https://task-manager-client-csx8.onrender.com/](https://task-manager-client-csx8.onrender.com/)  
+**Backend API:** [https://task-manager-api-35i1.onrender.com](https://task-manager-api-35i1.onrender.com)
 
 ## ✨ Features
 
