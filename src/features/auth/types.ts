@@ -1,16 +1,9 @@
-import type {
-  User,
-  LoginCredentials,
-  RegisterCredentials,
-  AuthResponse,
-} from "../../utils/types/api.types";
+import type { User } from "../../utils/types/api.types";
 
 export interface AuthState {
   user: User | null;
   token: string | null;
   isLoading: boolean;
   error: string | null;
+  socketConnected: boolean;
 }
-
-export interface LoginRequest extends LoginCredentials {}
-export interface RegisterRequest extends RegisterCredentials {}

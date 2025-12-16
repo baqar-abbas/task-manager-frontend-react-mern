@@ -4,8 +4,6 @@ import type { Task, Pagination } from "../../utils/types/api.types";
 import type {
   TasksState,
   TaskFilters,
-  CreateTaskRequest,
-  UpdateTaskRequest,
 } from "./types";
 
 const initialState: TasksState = {

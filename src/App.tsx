@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAppSelector } from "./app/hooks";
 import Layout from "./components/layout/Layout";
 import Loader from "./components/common/Loader";
+import ToastContainer from "./components/common/ToastContainer";
+import { useToast } from "./hooks/useToast";
 
 // Lazy load pages for better performance
 const LoginPage = React.lazy(() => import("./pages/LoginPage"));
@@ -41,6 +43,8 @@ const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 };
 
 const App: React.FC = () => {
+  const { toasts, removeToast } = useToast();
+
   return (
     <React.Suspense fallback={<Loader fullScreen />}>
       <Routes>
@@ -100,6 +104,9 @@ const App: React.FC = () => {
         {/* Catch all route */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+
+      {/* Global Toast Container */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </React.Suspense>
   );
 };

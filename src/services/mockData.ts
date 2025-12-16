@@ -75,7 +75,7 @@ export const mockTasks: Task[] = [
 // Mock API responses
 export const mockApi = {
   auth: {
-    login: async (credentials: { email: string; password: string }) => {
+    login: async (_: { email: string; password: string }) => {
       await delay(800);
       return {
         success: true,
