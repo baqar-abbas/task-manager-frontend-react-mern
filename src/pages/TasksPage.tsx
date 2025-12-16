@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import {
   useGetTasksQuery,
@@ -12,22 +12,54 @@ import Button from "../components/common/Button";
 import Card from "../components/common/Card";
 import Modal from "../components/common/Modal";
 import Loader from "../components/common/Loader";
-import { FaPlus, FaFilter, FaSort } from "react-icons/fa";
+import SocketService from "../services/socket";
+import {
+  FaPlus,
+  FaFilter,
+  FaSort,
+  FaSync,
+  FaChartBar,
+  FaDownload,
+  FaEye,
+  FaEyeSlash,
+} from "react-icons/fa";
 
 const TasksPage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { filters } = useAppSelector((state) => state.tasks);
+  const { socketConnected } = useAppSelector((state) => state.auth);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [showArchived, setShowArchived] = useState(false);
 
   // Fetch tasks with current filters
-  const { data: tasksData, isLoading, refetch } = useGetTasksQuery(filters);
+  const {
+    data: tasksData,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useGetTasksQuery(filters);
+
   const [deleteTask] = useDeleteTaskMutation();
   const [updateTaskStatus] = useUpdateTaskStatusMutation();
 
   const tasks = tasksData?.data?.tasks || [];
   const pagination = tasksData?.data?.pagination;
+
+  // Join socket rooms for current tasks
+  useEffect(() => {
+    tasks.forEach((task) => {
+      SocketService.joinTaskRoom(task._id);
+    });
+
+    return () => {
+      tasks.forEach((task) => {
+        SocketService.leaveTaskRoom(task._id);
+      });
+    };
+  }, [tasks]);
 
   const handleFilterChange = (key: string, value: any) => {
     dispatch(setFilters({ [key]: value, page: 1 }));
@@ -35,20 +67,6 @@ const TasksPage: React.FC = () => {
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleFilterChange("search", e.target.value);
-  };
-
-  const handleStatusFilter = (status: string) => {
-    handleFilterChange(
-      "status",
-      status === filters.status ? undefined : status
-    );
-  };
-
-  const handlePriorityFilter = (priority: string) => {
-    handleFilterChange(
-      "priority",
-      priority === filters.priority ? undefined : priority
-    );
   };
 
   const handleSort = (sortBy: string) => {
@@ -63,7 +81,8 @@ const TasksPage: React.FC = () => {
     if (window.confirm("Are you sure you want to delete this task?")) {
       try {
         await deleteTask(taskId).unwrap();
-        refetch();
+        // Leave the task room when deleted
+        SocketService.leaveTaskRoom(taskId);
       } catch (error) {
         console.error("Failed to delete task:", error);
       }
@@ -72,12 +91,10 @@ const TasksPage: React.FC = () => {
 
   const handleStatusChange = async (
     taskId: string,
-    // status: string - Replace with correct type
     status: "pending" | "in-progress" | "completed" | "archived"
   ) => {
     try {
       await updateTaskStatus({ id: taskId, data: { status } }).unwrap();
-      refetch();
     } catch (error) {
       console.error("Failed to update task status:", error);
     }
@@ -87,6 +104,37 @@ const TasksPage: React.FC = () => {
     dispatch(setFilters({ page }));
   };
 
+  const handleExportTasks = () => {
+    const tasksJson = JSON.stringify(tasks, null, 2);
+    const blob = new Blob([tasksJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tasks-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleClearFilters = () => {
+    dispatch(
+      setFilters({
+        status: undefined,
+        priority: undefined,
+        search: "",
+        page: 1,
+      })
+    );
+  };
+
+  const toggleArchived = () => {
+    if (showArchived) {
+      handleFilterChange("status", undefined);
+    } else {
+      handleFilterChange("status", "archived");
+    }
+    setShowArchived(!showArchived);
+  };
+
   if (isLoading) {
     return <Loader />;
   }
@@ -94,27 +142,83 @@ const TasksPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Task Management</h1>
-          <p className="text-gray-600 mt-2">
-            {pagination?.total || 0} tasks total
-          </p>
+          <div className="flex items-center gap-4 mt-2">
+            <p className="text-gray-600">
+              {pagination?.total || 0} tasks total
+            </p>
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  socketConnected ? "bg-green-500" : "bg-red-500"
+                }`}
+              ></div>
+              <span className="text-sm text-gray-500">
+                {socketConnected ? "Live updates enabled" : "Reconnecting..."}
+              </span>
+            </div>
+          </div>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} variant="primary">
-          <FaPlus className="mr-2" />
-          New Task
-        </Button>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={toggleArchived}
+            variant={showArchived ? "primary" : "outline"}
+            size="sm"
+          >
+            {showArchived ? (
+              <FaEyeSlash className="mr-2" />
+            ) : (
+              <FaEye className="mr-2" />
+            )}
+            {showArchived ? "Hide Archived" : "Show Archived"}
+          </Button>
+
+          <Button
+            onClick={() => setShowFilters(!showFilters)}
+            variant="outline"
+            size="sm"
+          >
+            <FaFilter className="mr-2" />
+            Filters
+          </Button>
+
+          <Button
+            onClick={() => refetch()}
+            variant="outline"
+            size="sm"
+            disabled={isFetching}
+          >
+            <FaSync className={`mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+
+          <Button onClick={handleExportTasks} variant="outline" size="sm">
+            <FaDownload className="mr-2" />
+            Export
+          </Button>
+
+          <Button onClick={() => setShowCreateModal(true)} variant="primary">
+            <FaPlus className="mr-2" />
+            New Task
+          </Button>
+        </div>
       </div>
 
       {/* Filters Bar */}
-      <Card>
+      <Card
+        className={`transition-all duration-300 ${
+          showFilters ? "block" : "hidden"
+        }`}
+      >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex-1">
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search tasks..."
+                placeholder="Search tasks by title, description, or tags..."
                 value={filters.search || ""}
                 onChange={handleSearch}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -123,7 +227,7 @@ const TasksPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Status Filter */}
             <div className="relative">
               <select
@@ -132,6 +236,7 @@ const TasksPage: React.FC = () => {
                   handleFilterChange("status", e.target.value || undefined)
                 }
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={showArchived}
               >
                 <option value="">All Status</option>
                 <option value="pending">Pending</option>
@@ -153,22 +258,44 @@ const TasksPage: React.FC = () => {
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
+                <option value="urgent">Urgent</option>
               </select>
             </div>
 
-            {/* Sort */}
+            {/* Sort Options */}
+            <div className="relative">
+              <select
+                value={filters.sortBy}
+                onChange={(e) => handleSort(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="createdAt">Sort by Date</option>
+                <option value="dueDate">Sort by Due Date</option>
+                <option value="priority">Sort by Priority</option>
+                <option value="title">Sort by Title</option>
+              </select>
+            </div>
+
+            {/* Sort Order */}
             <Button
               variant="outline"
-              onClick={() => handleSort("createdAt")}
+              onClick={() => handleSort(filters.sortBy)}
               className="flex items-center"
             >
               <FaSort className="mr-2" />
-              {filters.sortBy === "createdAt"
-                ? filters.sortOrder === "desc"
-                  ? "Newest"
-                  : "Oldest"
-                : "Sort"}
+              {filters.sortOrder === "desc" ? "↓ Desc" : "↑ Asc"}
             </Button>
+
+            {/* Clear Filters */}
+            {(filters.status || filters.priority || filters.search) && (
+              <Button
+                variant="secondary"
+                onClick={handleClearFilters}
+                size="sm"
+              >
+                Clear Filters
+              </Button>
+            )}
           </div>
         </div>
 
@@ -212,6 +339,42 @@ const TasksPage: React.FC = () => {
         )}
       </Card>
 
+      {/* View Mode Toggle */}
+      <div className="flex justify-between items-center">
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-600">View:</span>
+          <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`px-3 py-1 text-sm ${
+                viewMode === "list"
+                  ? "bg-primary-600 text-white"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              List
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`px-3 py-1 text-sm ${
+                viewMode === "grid"
+                  ? "bg-primary-600 text-white"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              Grid
+            </button>
+          </div>
+        </div>
+
+        {isFetching && (
+          <div className="flex items-center text-sm text-gray-500">
+            <FaSync className="animate-spin mr-2" />
+            Updating...
+          </div>
+        )}
+      </div>
+
       {/* Tasks List */}
       <TaskList
         tasks={tasks}
@@ -219,10 +382,29 @@ const TasksPage: React.FC = () => {
         onStatusChange={handleStatusChange}
       />
 
+      {/* Empty State */}
+      {tasks.length === 0 && !isLoading && (
+        <Card className="text-center py-12">
+          <FaChartBar className="text-gray-400 text-4xl mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-700 mb-2">
+            No tasks found
+          </h3>
+          <p className="text-gray-500 mb-6">
+            {filters.search || filters.status || filters.priority
+              ? "Try adjusting your filters to see more tasks."
+              : "Create your first task to get started!"}
+          </p>
+          <Button onClick={() => setShowCreateModal(true)} variant="primary">
+            <FaPlus className="mr-2" />
+            Create Your First Task
+          </Button>
+        </Card>
+      )}
+
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
         <Card>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="text-sm text-gray-600">
               Showing {(pagination.currentPage - 1) * pagination.limit + 1} to{" "}
               {Math.min(
@@ -240,9 +422,40 @@ const TasksPage: React.FC = () => {
               >
                 Previous
               </Button>
-              <span className="px-4 py-2 text-sm text-gray-700">
-                Page {pagination.currentPage} of {pagination.totalPages}
-              </span>
+              <div className="flex items-center">
+                {Array.from(
+                  { length: Math.min(5, pagination.totalPages) },
+                  (_, i) => {
+                    let pageNum;
+                    if (pagination.totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (pagination.currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (
+                      pagination.currentPage >=
+                      pagination.totalPages - 2
+                    ) {
+                      pageNum = pagination.totalPages - 4 + i;
+                    } else {
+                      pageNum = pagination.currentPage - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={`px-3 py-1 mx-1 rounded ${
+                          pagination.currentPage === pageNum
+                            ? "bg-primary-600 text-white"
+                            : "hover:bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  }
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"

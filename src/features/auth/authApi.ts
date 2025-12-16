@@ -6,46 +6,9 @@ import type {
   RegisterCredentials,
   User,
 } from "../../utils/types/api.types";
-import { mockApi } from "../../services/mockData";
-
-// Determine if we should use mock or real API
-const USE_MOCK =
-  import.meta.env.VITE_USE_MOCK === "true" || !import.meta.env.PROD;
-
-// Mock base query for development
-const mockBaseQuery = async (args: any) => {
-  const { url, method, body } = args;
-
-  if (url === "/auth/login" && method === "POST") {
-    const response = await mockApi.auth.login(body);
-    return { data: response };
-  }
-
-  //   if (url === "/auth/register" && method === "POST") {
-  //     const response = await mockApi.auth.register(body);
-  //     return { data: response };
-  //   }
-
-  if (url === "/auth/register" && method === "POST") {
-    const response = await mockApi.auth.register(body);
-    return { data: response };
-  }
-
-  if (url === "/auth/logout" && method === "POST") {
-    // Mock logout - just return success
-    return { data: { success: true, message: "Logged out successfully" } };
-  }
-
-  //   return {
-  //     error: { status: 404, data: { message: "Mock endpoint not found" } },
-  //   };
-  return {
-    error: { status: 404, data: { message: "Mock endpoint not found" } },
-  };
-};
 
 // Real API base query
-const realBaseQuery = fetchBaseQuery({
+const baseQuery = fetchBaseQuery({
   baseUrl: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   prepareHeaders: (headers) => {
     const token = localStorage.getItem("token");
@@ -54,11 +17,42 @@ const realBaseQuery = fetchBaseQuery({
     }
     return headers;
   },
+  // Add timeout and other configurations
+  timeout: 10000, // 10 seconds timeout
 });
 
 export const authApi = createApi({
   reducerPath: "authApi",
-  baseQuery: USE_MOCK ? mockBaseQuery : realBaseQuery,
+  baseQuery: async (args, api, extraOptions) => {
+    try {
+      const result = await baseQuery(args, api, extraOptions);
+
+      // Handle 401 errors (token expired)
+      if (result.error?.status === 401) {
+        // Clear invalid token
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+
+        // Redirect to login page
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+
+      return result;
+    } catch (error: any) {
+      // Handle network errors
+      return {
+        error: {
+          status: "NETWORK_ERROR",
+          data: {
+            message: error.message || "Network error occurred",
+          },
+        },
+      };
+    }
+  },
+  tagTypes: ["Auth"],
   endpoints: (builder) => ({
     login: builder.mutation<ApiResponse<AuthResponse>, LoginCredentials>({
       query: (credentials) => ({
@@ -66,6 +60,7 @@ export const authApi = createApi({
         method: "POST",
         body: credentials,
       }),
+      invalidatesTags: ["Auth"],
     }),
     register: builder.mutation<ApiResponse<AuthResponse>, RegisterCredentials>({
       query: (userData) => ({
@@ -73,9 +68,13 @@ export const authApi = createApi({
         method: "POST",
         body: userData,
       }),
+      invalidatesTags: ["Auth"],
     }),
     getProfile: builder.query<ApiResponse<{ user: User }>, void>({
       query: () => "/auth/me",
+      providesTags: ["Auth"],
+      // Cache profile for 5 minutes
+      keepUnusedDataFor: 300,
     }),
     updateProfile: builder.mutation<ApiResponse<{ user: User }>, Partial<User>>(
       {
@@ -84,6 +83,23 @@ export const authApi = createApi({
           method: "PUT",
           body: userData,
         }),
+        invalidatesTags: ["Auth"],
+        // Optimistic update
+        async onQueryStarted(updatedData, { dispatch, queryFulfilled }) {
+          const patchResult = dispatch(
+            authApi.util.updateQueryData("getProfile", undefined, (draft) => {
+              if (draft.data?.user) {
+                Object.assign(draft.data.user, updatedData);
+              }
+            })
+          );
+
+          try {
+            await queryFulfilled;
+          } catch {
+            patchResult.undo();
+          }
+        },
       }
     ),
     logout: builder.mutation<ApiResponse<void>, void>({
@@ -91,6 +107,7 @@ export const authApi = createApi({
         url: "/auth/logout",
         method: "POST",
       }),
+      invalidatesTags: ["Auth"],
     }),
   }),
 });

@@ -4,38 +4,14 @@ import type {
   Task,
   PaginatedResponse,
 } from "../../utils/types/api.types";
-import { mockApi } from "../../services/mockData";
 import type {
   CreateTaskRequest,
   UpdateTaskRequest,
   UpdateTaskStatusRequest,
 } from "./types";
 
-const USE_MOCK =
-  import.meta.env.VITE_USE_MOCK === "true" || !import.meta.env.PROD;
-
-// Mock base query for tasks
-const mockTasksBaseQuery = async (args: any) => {
-  const { url, method, body, params } = args;
-
-  if (url === "/tasks" && method === "GET") {
-    const response = await mockApi.tasks.getAll(params);
-    return { data: response };
-  }
-
-  if (url === "/tasks" && method === "POST") {
-    const response = await mockApi.tasks.create(body);
-    return { data: response };
-  }
-
-  // Add more mock endpoints as needed
-  return {
-    error: { status: 404, data: { message: "Mock endpoint not found" } },
-  };
-};
-
-// Real API base query
-const realBaseQuery = fetchBaseQuery({
+// Real API base query with error handling
+const baseQuery = fetchBaseQuery({
   baseUrl: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   prepareHeaders: (headers) => {
     const token = localStorage.getItem("token");
@@ -44,11 +20,36 @@ const realBaseQuery = fetchBaseQuery({
     }
     return headers;
   },
+  timeout: 10000, // 10 seconds timeout
 });
 
 export const tasksApi = createApi({
   reducerPath: "tasksApi",
-  baseQuery: USE_MOCK ? mockTasksBaseQuery : realBaseQuery,
+  baseQuery: async (args, api, extraOptions) => {
+    try {
+      const result = await baseQuery(args, api, extraOptions);
+
+      // Handle 401 errors (token expired)
+      if (result.error?.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+
+      return result;
+    } catch (error: any) {
+      return {
+        error: {
+          status: "NETWORK_ERROR",
+          data: {
+            message: error.message || "Network error occurred",
+          },
+        },
+      };
+    }
+  },
   tagTypes: ["Task"],
   endpoints: (builder) => ({
     getTasks: builder.query<ApiResponse<PaginatedResponse<Task>>, any>({
@@ -90,14 +91,14 @@ export const tasksApi = createApi({
         method: "PUT",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "Task", id }],
+      invalidatesTags: (_, __, { id }) => [{ type: "Task", id }],
     }),
     deleteTask: builder.mutation<ApiResponse<void>, string>({
       query: (id) => ({
         url: `/tasks/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: (result, error, id) => [
+      invalidatesTags: (_, __, id) => [
         { type: "Task", id },
         { type: "Task", id: "LIST" },
       ],
@@ -111,7 +112,7 @@ export const tasksApi = createApi({
         method: "PATCH",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "Task", id }],
+      invalidatesTags: (_, __, { id }) => [{ type: "Task", id }],
     }),
     getTaskStats: builder.query<ApiResponse<any>, void>({
       query: () => "/tasks/stats/overview",
